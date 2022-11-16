@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>SocketCluster</title>
+  <link rel="icon" type="image/png" href="/favicon.ico">
+  <script type="text/javascript" src="/socketcluster-client.js"></script>
+  <style>
+    @font-face {
+      font-family: 'Roboto';
+      src: URL('Roboto-Light.ttf') format('truetype');
+    }
+
+    html {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      color: #666666;
+      display: table;
+      font-weight: 100;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    a {
+      font-weight: 300;
+      color: #72B963;
+    }
+
+    .container {
+      display: table-cell;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .content {
+      text-align: center;
+      display: inline-block;
+    }
+
+    .logo {
+      width: 200px;
+      height: 200px;
+      margin-bottom: 10px;
+    }
+
+    .title {
+      font-family: 'Roboto', Helvetica, sans-serif;
+      font-size: 96px;
+      margin-bottom: 20px;
+    }
+
+    .text {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .small {
+      font-size: 18px;
+    }
+
+    .github-button {
+      padding-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="content">
+      <img class="logo" src="img/logo.png" alt="Logo" />
+      <div class="title">
+        SocketCluster
+      </div>
+      <div class="small">
+        <a href="https://socketcluster.io/docs/guides/">Guides</a> <strong>&middot;</strong>
+        <a href="https://socketcluster.io/docs/api/">API Docs</a>
+        <input type="text" class="message">
+        <button class="send">Send Message</button>
+      </div>
+      <p class="github-button">
+        <iframe
+          src="https://ghbtns.com/github-btn.html?user=socketcluster&repo=socketcluster&type=star&count=true&size=large"
+          frameborder="0" scrolling="0" width="160px" height="30px"></iframe>
+      </p>
+    </div>
+  </div>
+  <script type="text/javascript">
+
+
+
+    // Initiate the connection to the server
+    let socket = socketClusterClient.create({
+      hostname: 'localhost',
+      port: 8000
+    });
+
+    const isConnected = () => socket && socket.state === socket.OPEN;
+    const debugFactory = (debugMode = true) => ({
+      debug: debugMode ? console.log : muted,
+      debugBeginGroup: debugMode ? console.groupCollapsed : muted,
+      debugEndGroup: debugMode ? console.groupEnd : muted,
+    });
+
+    let { debug, debugBeginGroup, debugEndGroup } = debugFactory();
+
+
+
+    const subscribeChannel = (channelName, callback, isPrivate = false) => {
+      if (!isConnected()) {
+        debug(
+          '[Socket] Socket is not created or open, so cannot subscribe channel',
+          channelName,
+        );
+        return null;
+      }
+      const channel = socket.channel(channelName);
+      debugBeginGroup(`Subscribe channel ${channelName}`);
+      if (channel.state !== channel.SUBSCRIBED) {
+        channel.subscribe({
+          waitForAuth: !!isPrivate,
+        });
+
+        debug(`Channel ${channelName} has subscribed`);
+
+        if (callback) {
+          debug(`Channel ${channelName} is consuming`);
+          (async () => {
+            await channel.listener('subscribe').once();
+            // eslint-disable-next-line no-restricted-syntax
+            for await (const data of channel) {
+              console.log('forawait ~ data', data);
+              callback(data);
+            }
+          })();
+        }
+      } else {
+        debug(`Channel ${channelName} has subscribed before`);
+      }
+
+      return channel;
+    };
+
+    (async () => {
+      for await (let { error } of socket.listener('error')) {
+        console.error(error);
+      }
+    })();
+
+    (async () => {
+      for await (let event of socket.listener('connect')) {
+        console.log('Socket is connected');
+
+        subscribeChannel('foo', (data) => console.log(data))
+
+      }
+    })();
+
+
+
+    const msg = document.querySelector('.message');
+    const btnSend = document.querySelector('.send');
+    btnSend.onclick = async () => {
+      socket.transmit('message', {
+        to: 'foo',
+        message: msg.value
+      })
+      // let result;
+      // try {
+      //   result = await socket.invoke('customProc', { bad: false });
+      //   console.log('btnSend.onclick= ~ result', result);
+      // } catch (error) {
+      //   console.log('btnSend.onclick= ~ error', error);
+      //   // error will throw.
+      //   // error.name will be 'BadCustomError'.
+      // }
+    }
+
+
+
+  </script>
+</body>
+
+</html>
