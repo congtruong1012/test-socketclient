@@ -64,15 +64,58 @@ expressApp.get("/health-check", (req, res) => {
   }
 })();
 
+agServer.setMiddleware(
+  agServer.MIDDLEWARE_INBOUND,
+  async (middlewareStream) => {
+    for await (let action of middlewareStream) {
+      if (action.type === action.PUBLISH_IN) {
+        const authToken = action.socket.authToken;
+        if (
+          !authToken ||
+          !authToken.username
+          // !Array.isArray(authToken.channels) ||
+          // authToken.channels.indexOf(action.channel) === -1
+        ) {
+          const publicError = new Error(
+            "`You are not authorized to publish to the ${action.channel} channel`"
+          );
+          publicError.name = "PublishError";
+          action.block(publicError);
+          continue; // Go to the start of the loop to process the next inbound action.
+        }
+      }
+      // Any unhandled case will be allowed by default.
+      action.allow();
+    }
+  }
+);
 // SocketCluster/WebSocket connection handling loop.
 (async () => {
   for await (let { socket } of agServer.listener("connection")) {
     (async () => {
+      for await (const req of socket.procedure("login")) {
+        const { username, password } = req.data;
+        if (username !== "congtruong" || password !== "123") {
+          let loginFailed = new Error("Login failed");
+          loginFailed.name = "Login failed";
+          req.error(loginFailed);
+          continue;
+        }
+        req.end(true);
+        socket.setAuthToken({
+          username,
+        });
+      }
+    })();
+
+    (async () => {
       // Set up a loop to handle remote transmitted events.
       for await (let data of socket.receiver("message")) {
-        console.log("forawait ~ data", data);
         // ...
-        agServer.exchange.transmitPublish("foo", "This is some data");
+        agServer.exchange.transmitPublish(data.channel, {
+          name: data.name,
+          message: data.message,
+        });
       }
     })();
 
